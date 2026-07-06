@@ -1,0 +1,19 @@
+.main-content-layout {
+  min-height: calc(100vh - 80px);
+  width: 100%;
+}
+
+.app-loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 80vh;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+
+.app-loading-screen p {
+  font-size: 1rem;
+  font-weight: 600;
+}
