@@ -50,6 +50,7 @@ const AddMedicine = () => {
     if (!name.trim()) newErrors.name = 'Medicine name is required';
     if (!dosage.trim()) newErrors.dosage = 'Dosage (e.g. 1 pill, 10mg) is required';
     if (!startDate) newErrors.startDate = 'Start date is required';
+    if (!endDate) newErrors.endDate = 'End date is required';
     
     // Check if times contain duplicates or invalid
     const emptyTime = times.some(t => !t);
@@ -258,14 +259,16 @@ const AddMedicine = () => {
 
             {/* End Date */}
             <div className="form-group-field">
-              <label htmlFor="med-end-date"><Calendar size={14} /> End Date (Optional)</label>
+              <label htmlFor="med-end-date"><Calendar size={14} /> End Date</label>
               <input
                 id="med-end-date"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 min={startDate}
+                className={errors.endDate ? 'field-error' : ''}
               />
+              {errors.endDate && <span className="field-error-text">{errors.endDate}</span>}
             </div>
           </div>
 

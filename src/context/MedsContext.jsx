@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import { medicinesAPI, healthAPI, aiAPI } from '../services/api';
 
 const MedsContext = createContext(null);
 
@@ -9,66 +10,39 @@ export const useMeds = () => {
   return context;
 };
 
-// Initial Mock Medicines for demo/reference (attached to a user when they first log in)
-const defaultMeds = [
-  {
-    id: 'med_1',
-    name: 'Atorvastatin',
-    dosage: '10mg',
-    frequency: 'daily',
-    times: ['21:00'],
-    instructions: 'Take with or after dinner',
-    shape: 'tablet',
-    color: 'blue',
-    startDate: '2026-07-01',
-    endDate: '2026-12-31',
-    userId: 'demo_user',
-    history: {
-      '2026-07-04': { '21:00': 'taken' },
-      '2026-07-05': { '21:00': 'taken' }
-    }
-  },
-  {
-    id: 'med_2',
-    name: 'Metformin',
-    dosage: '500mg',
-    frequency: 'daily',
-    times: ['08:00', '20:00'],
-    instructions: 'Take with breakfast and dinner',
-    shape: 'capsule',
-    color: 'green',
-    startDate: '2026-06-15',
-    endDate: '2026-12-15',
-    userId: 'demo_user',
-    history: {
-      '2026-07-04': { '08:00': 'taken', '20:00': 'taken' },
-      '2026-07-05': { '08:00': 'taken', '20:00': 'pending' }
-    }
-  },
-  {
-    id: 'med_3',
-    name: 'Lisinopril',
-    dosage: '10mg',
-    frequency: 'daily',
-    times: ['08:00'],
-    instructions: 'Take in the morning on an empty stomach',
-    shape: 'tablet',
-    color: 'red',
-    startDate: '2026-07-03',
-    endDate: '2026-09-03',
-    userId: 'demo_user',
-    history: {
-      '2026-07-04': { '08:00': 'taken' },
-      '2026-07-05': { '08:00': 'missed' }
-    }
-  }
-];
+// Standard glass to ml conversion ratio (1 glass = 250ml)
+const GLASS_TO_ML = 250;
 
-// Initial Health Tracker Stats for Demo
-const defaultHealthStats = {
-  '2026-07-04': { water: 6, sleep: 7.5, exercise: 45 },
-  '2026-07-05': { water: 5, sleep: 6.8, exercise: 20 }
-};
+
+
+// Mapping Helpers: Frontend <--> Backend data models
+const mapBackendToFrontend = (med) => ({
+  id: med._id,
+  name: med.medicineName,
+  dosage: med.dosage,
+  frequency: med.frequency,
+  times: med.time ? med.time.split(',') : [],
+  instructions: med.instructions || '',
+  shape: med.shape || 'tablet',
+  color: med.color || 'blue',
+  startDate: med.startDate ? med.startDate.split('T')[0] : '',
+  endDate: med.endDate ? med.endDate.split('T')[0] : '',
+  userId: med.userId,
+  history: med.history || {},
+});
+
+const mapFrontendToBackend = (med) => ({
+  medicineName: med.name,
+  dosage: med.dosage,
+  frequency: med.frequency,
+  time: med.times ? med.times.join(',') : '',
+  instructions: med.instructions || '',
+  shape: med.shape || 'tablet',
+  color: med.color || 'blue',
+  startDate: med.startDate,
+  endDate: med.endDate,
+  history: med.history || {},
+});
 
 export const MedsProvider = ({ children }) => {
   const { user } = useAuth();
@@ -76,126 +50,220 @@ export const MedsProvider = ({ children }) => {
   const [healthStats, setHealthStats] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all'); // all, active, completed
+  const [loading, setLoading] = useState(false);
+  const [aiInsight, setAiInsight] = useState('');
+  const [insightLoading, setInsightLoading] = useState(false);
 
-  // Load user data on login/logout
+  // Fetch personalized daily wellness insight
+  const fetchInsight = async () => {
+    if (!user) return;
+    setInsightLoading(true);
+    try {
+      const res = await aiAPI.chat("Generate a single sentence personalized wellness insight (1-2 sentences max) based on my medicines and health records. Make it sound natural and conversational. Don't just list raw data. For example: 'Great job! You've already logged 1250 ml of water today and slept 6.5 hours. Don't forget your evening medicines.' If no logs exist, return: 'We don't have enough health data yet. Start tracking your medicines and daily health to receive personalized AI insights.' Do not use markdown headers or quotes.");
+      setAiInsight(res.response);
+    } catch (err) {
+      console.error('Failed to load personalized AI insight:', err);
+      setAiInsight('Could not retrieve dynamic insight. Keep tracking to stay healthy!');
+    } finally {
+      setInsightLoading(false);
+    }
+  };
+
+  // Load user data (medicines and health logs) on login/session recovery
+  const loadData = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      // 1. Load medicines
+      const backendMeds = await medicinesAPI.getMedicines();
+      const mappedMeds = backendMeds.map(mapBackendToFrontend);
+      
+      setMedicines(mappedMeds);
+
+      // 2. Load health tracker history
+      const logs = await healthAPI.getHealthLogs();
+      const stats = {};
+      logs.forEach((log) => {
+        const dateStr = new Date(log.date).toISOString().split('T')[0];
+        stats[dateStr] = {
+          water: Math.round(log.waterIntake / GLASS_TO_ML),
+          sleep: log.sleepHours,
+          exercise: log.exerciseMinutes,
+        };
+      });
+      setHealthStats(stats);
+      // Fetch insight after loading data
+      fetchInsight();
+    } catch (error) {
+      console.error('Failed to load user medication or health stats:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (user) {
-      // Load user specific medicines
-      const allMeds = JSON.parse(localStorage.getItem('meditrack_medicines')) || [];
-      const userMeds = allMeds.filter((m) => m.userId === user.id);
-      
-      // If a brand new user logged in, give them the template meds for demo purposes
-      if (userMeds.length === 0) {
-        const demoMedsForUser = defaultMeds.map((m) => ({ ...m, userId: user.id, id: 'med_' + Math.random().toString(36).substring(2, 9) }));
-        const updatedAllMeds = [...allMeds, ...demoMedsForUser];
-        localStorage.setItem('meditrack_medicines', JSON.stringify(updatedAllMeds));
-        setMedicines(demoMedsForUser);
-      } else {
-        setMedicines(userMeds);
-      }
-
-      // Load user health tracker stats
-      const allHealthStats = JSON.parse(localStorage.getItem('meditrack_health_stats')) || {};
-      const userHealthKey = `stats_${user.id}`;
-      const userStats = allHealthStats[userHealthKey] || {};
-      
-      // Seed demo data if none exists
-      if (Object.keys(userStats).length === 0) {
-        allHealthStats[userHealthKey] = defaultHealthStats;
-        localStorage.setItem('meditrack_health_stats', JSON.stringify(allHealthStats));
-        setHealthStats(defaultHealthStats);
-      } else {
-        setHealthStats(userStats);
-      }
+      loadData();
     } else {
       setMedicines([]);
       setHealthStats({});
     }
   }, [user]);
 
-  // Sync state to local storage helper
-  const syncMedicines = (updatedMeds) => {
-    setMedicines(updatedMeds);
-    const allMeds = JSON.parse(localStorage.getItem('meditrack_medicines')) || [];
-    // Remove user's old meds and add new ones
-    const filteredAllMeds = allMeds.filter((m) => m.userId !== user?.id);
-    const finalAllMeds = [...filteredAllMeds, ...updatedMeds.map(m => ({ ...m, userId: user.id }))];
-    localStorage.setItem('meditrack_medicines', JSON.stringify(finalAllMeds));
-  };
-
-  const syncHealthStats = (updatedStats) => {
-    setHealthStats(updatedStats);
-    const allHealthStats = JSON.parse(localStorage.getItem('meditrack_health_stats')) || {};
-    const userHealthKey = `stats_${user?.id}`;
-    allHealthStats[userHealthKey] = updatedStats;
-    localStorage.setItem('meditrack_health_stats', JSON.stringify(allHealthStats));
-  };
-
   // 1. Add Medicine
-  const addMedicine = (medData) => {
-    const newMed = {
-      id: 'med_' + Math.random().toString(36).substring(2, 9),
-      ...medData,
-      userId: user.id,
-      history: medData.history || {}
-    };
-    syncMedicines([newMed, ...medicines]);
+  const addMedicine = async (medData) => {
+    setLoading(true);
+    try {
+      const backendPayload = mapFrontendToBackend(medData);
+      const res = await medicinesAPI.addMedicine(backendPayload);
+      const newMed = mapBackendToFrontend(res);
+      setMedicines((prev) => [newMed, ...prev]);
+      fetchInsight();
+    } catch (error) {
+      console.error('Failed to add medicine schedule:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 2. Edit Medicine
-  const editMedicine = (id, updatedData) => {
-    const updated = medicines.map((m) => (m.id === id ? { ...m, ...updatedData } : m));
-    syncMedicines(updated);
+  const editMedicine = async (id, updatedData) => {
+    setLoading(true);
+    try {
+      const localMed = medicines.find((m) => m.id === id);
+      if (!localMed) throw new Error('Medicine not found in local state');
+      
+      const mergedMed = { ...localMed, ...updatedData };
+      const backendPayload = mapFrontendToBackend(mergedMed);
+      
+      const res = await medicinesAPI.updateMedicine(id, backendPayload);
+      const updatedMed = mapBackendToFrontend(res);
+      
+      setMedicines((prev) => prev.map((m) => (m.id === id ? updatedMed : m)));
+      fetchInsight();
+    } catch (error) {
+      console.error('Failed to edit medicine schedule:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 3. Delete Medicine
-  const deleteMedicine = (id) => {
-    const updated = medicines.filter((m) => m.id !== id);
-    syncMedicines(updated);
+  const deleteMedicine = async (id) => {
+    setLoading(true);
+    try {
+      await medicinesAPI.deleteMedicine(id);
+      setMedicines((prev) => prev.filter((m) => m.id !== id));
+      fetchInsight();
+    } catch (error) {
+      console.error('Failed to delete medicine schedule:', error);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 4. Log Adherence Status
-  const logAdherence = (medId, dateStr, timeStr, status) => {
-    const updated = medicines.map((m) => {
-      if (m.id === medId) {
-        const history = { ...m.history };
-        if (!history[dateStr]) {
-          history[dateStr] = {};
-        }
-        history[dateStr][timeStr] = status; // 'taken', 'missed', or 'pending'
-        return { ...m, history };
+  const logAdherence = async (medId, dateStr, timeStr, status) => {
+    try {
+      const localMed = medicines.find((m) => m.id === medId);
+      if (!localMed) throw new Error('Medicine not found');
+
+      const updatedHistory = { ...localMed.history };
+      if (!updatedHistory[dateStr]) {
+        updatedHistory[dateStr] = {};
       }
-      return m;
-    });
-    syncMedicines(updated);
+      updatedHistory[dateStr][timeStr] = status;
+
+      const backendPayload = mapFrontendToBackend({ ...localMed, history: updatedHistory });
+      const res = await medicinesAPI.updateMedicine(medId, backendPayload);
+      const updatedMed = mapBackendToFrontend(res);
+      
+      setMedicines((prev) => prev.map((m) => (m.id === medId ? updatedMed : m)));
+    } catch (error) {
+      console.error('Failed to log adherence:', error);
+      throw error;
+    }
   };
 
-  // 5. Update Health Stats
-  const updateWater = (dateStr, increment) => {
-    const currentStats = { ...healthStats };
-    if (!currentStats[dateStr]) {
-      currentStats[dateStr] = { water: 0, sleep: 0, exercise: 0 };
+  // 5. Update Health Stats - Water
+  const updateWater = async (dateStr, increment) => {
+    const todayLog = healthStats[dateStr] || { water: 0, sleep: 0, exercise: 0 };
+    const newGlasses = Math.max(0, todayLog.water + increment);
+
+    try {
+      const res = await healthAPI.addHealthLog({
+        date: dateStr,
+        waterIntake: newGlasses * GLASS_TO_ML,
+        sleepHours: todayLog.sleep,
+        exerciseMinutes: todayLog.exercise,
+      });
+
+      setHealthStats((prev) => ({
+        ...prev,
+        [dateStr]: {
+          ...todayLog,
+          water: Math.round(res.waterIntake / GLASS_TO_ML),
+        },
+      }));
+      fetchInsight();
+    } catch (error) {
+      console.error('Failed to update water tracker:', error);
     }
-    currentStats[dateStr].water = Math.max(0, (currentStats[dateStr].water || 0) + increment);
-    syncHealthStats(currentStats);
   };
 
-  const updateSleep = (dateStr, hours) => {
-    const currentStats = { ...healthStats };
-    if (!currentStats[dateStr]) {
-      currentStats[dateStr] = { water: 0, sleep: 0, exercise: 0 };
+  // 6. Update Health Stats - Sleep
+  const updateSleep = async (dateStr, hours) => {
+    const todayLog = healthStats[dateStr] || { water: 0, sleep: 0, exercise: 0 };
+    const newHours = Math.max(0, hours);
+
+    try {
+      const res = await healthAPI.addHealthLog({
+        date: dateStr,
+        waterIntake: todayLog.water * GLASS_TO_ML,
+        sleepHours: newHours,
+        exerciseMinutes: todayLog.exercise,
+      });
+
+      setHealthStats((prev) => ({
+        ...prev,
+        [dateStr]: {
+          ...todayLog,
+          sleep: res.sleepHours,
+        },
+      }));
+      fetchInsight();
+    } catch (error) {
+      console.error('Failed to update sleep log:', error);
     }
-    currentStats[dateStr].sleep = Math.max(0, hours);
-    syncHealthStats(currentStats);
   };
 
-  const updateExercise = (dateStr, minutes) => {
-    const currentStats = { ...healthStats };
-    if (!currentStats[dateStr]) {
-      currentStats[dateStr] = { water: 0, sleep: 0, exercise: 0 };
+  // 7. Update Health Stats - Exercise
+  const updateExercise = async (dateStr, minutes) => {
+    const todayLog = healthStats[dateStr] || { water: 0, sleep: 0, exercise: 0 };
+    const newMinutes = Math.max(0, minutes);
+
+    try {
+      const res = await healthAPI.addHealthLog({
+        date: dateStr,
+        waterIntake: todayLog.water * GLASS_TO_ML,
+        sleepHours: todayLog.sleep,
+        exerciseMinutes: newMinutes,
+      });
+
+      setHealthStats((prev) => ({
+        ...prev,
+        [dateStr]: {
+          ...todayLog,
+          exercise: res.exerciseMinutes,
+        },
+      }));
+      fetchInsight();
+    } catch (error) {
+      console.error('Failed to update exercise minutes:', error);
     }
-    currentStats[dateStr].exercise = Math.max(0, minutes);
-    syncHealthStats(currentStats);
   };
 
   // Filter & Search Logic
@@ -214,7 +282,7 @@ export const MedsProvider = ({ children }) => {
     });
   };
 
-  // Calculate Overall Adherence rate for dashboard stats
+  // Adherence compliance rate calculations
   const getAdherenceRate = () => {
     let totalScheduled = 0;
     let totalTaken = 0;
@@ -253,7 +321,12 @@ export const MedsProvider = ({ children }) => {
     updateWater,
     updateSleep,
     updateExercise,
-    adherenceRate: getAdherenceRate()
+    adherenceRate: getAdherenceRate(),
+    loading,
+    refreshData: loadData,
+    aiInsight,
+    insightLoading,
+    fetchInsight,
   };
 
   return <MedsContext.Provider value={value}>{children}</MedsContext.Provider>;

@@ -290,14 +290,16 @@ const EditMedicine = () => {
 
             {/* End Date */}
             <div className="form-group-field">
-              <label htmlFor="edit-end-date"><Calendar size={14} /> End Date (Optional)</label>
+              <label htmlFor="edit-end-date"><Calendar size={14} /> End Date</label>
               <input
                 id="edit-end-date"
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
                 min={startDate}
+                className={errors.endDate ? 'field-error' : ''}
               />
+              {errors.endDate && <span className="field-error-text">{errors.endDate}</span>}
             </div>
           </div>
 
