@@ -16,7 +16,15 @@ const aiRoutes = require('./routes/aiRoutes');
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: [
+      "http://localhost:5173",
+      "https://medi-track-six-zeta.vercel.app/"
+    ],
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(morgan('dev'));
 
