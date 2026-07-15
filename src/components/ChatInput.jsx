@@ -14,7 +14,7 @@ const ChatInput = ({ value, onChange, onSend, disabled }) => {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(120, textareaRef.current.scrollHeight)}px`;
+      textareaRef.current.style.height = `${Math.min(150, textareaRef.current.scrollHeight)}px`;
     }
   }, [value]);
 
