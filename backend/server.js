@@ -44,43 +44,10 @@ app.use('/api/health', healthRoutes);
 console.log(' - AI routes loaded');
 app.use('/api/ai', aiRoutes);
 
-// Temporary test route
-app.get('/api/test', (req, res) => {
-  res.json({ success: true, message: "Backend working" });
-});
-
 // 404 handler for undefined routes
 app.use(notFound);
 // Centralized error handling middleware
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  
-  // Print all registered routes
-  try {
-    const routes = [];
-    function print(path, layer) {
-      if (layer.route) {
-        layer.route.stack.forEach(print.bind(null, path + (path.endsWith('/') ? '' : '/') + layer.route.path));
-      } else if (layer.name === 'router' && layer.handle.stack) {
-        let prefix = '';
-        if (layer.regexp.source.includes('auth')) prefix = '/api/auth';
-        else if (layer.regexp.source.includes('users')) prefix = '/api/users';
-        else if (layer.regexp.source.includes('medicines')) prefix = '/api/medicines';
-        else if (layer.regexp.source.includes('health')) prefix = '/api/health';
-        else if (layer.regexp.source.includes('ai')) prefix = '/api/ai';
-        layer.handle.stack.forEach(print.bind(null, prefix));
-      } else if (layer.method) {
-        routes.push(`${layer.method.toUpperCase()} ${path}`);
-      }
-    }
-    app._router.stack.forEach(print.bind(null, ''));
-    console.log('--- Registered Express Routes ---');
-    routes.forEach(r => console.log(r));
-    console.log('---------------------------------');
-  } catch (e) {
-    console.error('Failed to print routes:', e);
-  }
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
