@@ -20,7 +20,8 @@ app.use(
   cors({
     origin: [
       "http://localhost:5173",
-      "https://medi-track-six-zeta.vercel.app/"
+      "http://localhost:5174",
+      "https://medi-track-six-zeta.vercel.app"
     ],
     credentials: true,
   })
