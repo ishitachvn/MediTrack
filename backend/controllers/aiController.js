@@ -21,7 +21,7 @@ const getAIChatResponse = asyncHandler(async (req, res) => {
   const healthLogs = await HealthLog.find({ userId: req.user }).sort({ date: -1 });
 
   // 3. Process query using Hybrid Routing
-  const responseText = await generateChatResponse(question, medicines, healthLogs);
+  const responseText = await generateChatResponse(question, medicines, healthLogs, req.user);
 
   res.json({ response: responseText });
 });
