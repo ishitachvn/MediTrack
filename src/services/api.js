@@ -1,9 +1,16 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || "https://meditrack-backend-13np.onrender.com/api";
+// Get API_URL environment variable with fallback
+let API_URL = import.meta.env.VITE_API_URL || "https://meditrack-backend-13np.onrender.com/api";
+
+// Normalize: ensure baseURL always includes the "/api" prefix to prevent path drops
+let normalizedURL = API_URL.trim();
+if (!normalizedURL.toLowerCase().endsWith('/api') && !normalizedURL.toLowerCase().endsWith('/api/')) {
+  normalizedURL = normalizedURL.replace(/\/+$/, '') + '/api';
+}
 
 const api = axios.create({
-  baseURL: API_URL,
+  baseURL: normalizedURL,
   headers: {
     'Content-Type': 'application/json',
   },
