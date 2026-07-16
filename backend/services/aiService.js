@@ -303,8 +303,10 @@ ${JSON.stringify(healthLogsContext, null, 2)}
     }
     console.log('Fallback response is triggered: YES (Exception Caught)');
     console.log('=== End generateChatResponse Diagnostic Log ===');
-    // Graceful error fallback using database data
-    return buildLocalFallbackText();
+    
+    // Return error details for remote debugging
+    const debugErr = `[DEBUG EXCEPTION ON RENDER: ${error.message}\nStack: ${error.stack}]`;
+    return `${debugErr}\n\n${buildLocalFallbackText()}`;
   }
 };
 
