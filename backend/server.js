@@ -45,15 +45,6 @@ app.use('/api/health', healthRoutes);
 console.log(' - AI routes loaded');
 app.use('/api/ai', aiRoutes);
 
-// Temporary diagnostics endpoint
-app.get('/api/env-check', (req, res) => {
-  res.json({
-    keys: Object.keys(process.env),
-    geminiKeyExists: !!process.env.GEMINI_API_KEY,
-    geminiKeyLength: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.length : 0
-  });
-});
-
 // 404 handler for undefined routes
 app.use(notFound);
 // Centralized error handling middleware

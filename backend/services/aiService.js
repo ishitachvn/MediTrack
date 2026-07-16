@@ -37,7 +37,6 @@ const resolveLocally = (question, medicines, healthLogs) => {
   const getTodaySchedule = () => {
     const schedule = [];
     medicines.forEach(m => {
-      console.log('DEBUG RESOLVE LOCALLY medicine:', JSON.stringify(m));
       if (isMedActiveToday(m)) {
         const times = m.time ? m.time.split(',') : [];
         times.forEach(t => {
@@ -156,36 +155,19 @@ const resolveLocally = (question, medicines, healthLogs) => {
  * Generate AI Response using Gemini with direct user data context
  */
 const generateChatResponse = async (question, medicines, healthLogs, userId = 'unknown') => {
-  console.log('=== generateChatResponse Diagnostic Log ===');
-  console.log('Incoming question:', question);
-  console.log('Authenticated User ID:', userId);
-  console.log(`Medicines loaded: ${medicines ? medicines.length : 0}`);
-  console.log(`Health logs loaded: ${healthLogs ? healthLogs.length : 0}`);
-
   // If database records are completely empty, return the required placeholder text immediately
   if (medicines.length === 0 && healthLogs.length === 0) {
-    console.log('Both medicines and health logs are empty. Returning placeholder.');
     return "I don't have enough information yet to answer that. Once you add medicines or health logs, I'll provide personalized responses.";
   }
 
   // 1. Try local deterministic resolver first
-  console.log('Attempting local deterministic routing...');
   const localResolution = resolveLocally(question, medicines, healthLogs);
   if (localResolution !== null) {
-    console.log('Hybrid routing: Resolving query locally without calling Gemini.');
-    console.log('Local resolution text:', localResolution);
     return localResolution;
   }
 
-  console.log('Hybrid routing: Query requires natural language analysis, calling Gemini...');
-  
   // 2. Fetch API Key and invoke Gemini
   const apiKey = process.env.GEMINI_API_KEY || Buffer.from("QVEuQWI4Uk42S3JkSEpfVUlLNzRZQTFDS29xaHA2UWRsRjJ2akhhWUtoelcxY2l4V3Q2TlE=", "base64").toString("ascii");
-  console.log('GEMINI_API_KEY environment variable check:');
-  console.log(' - exists:', typeof apiKey !== 'undefined');
-  console.log(' - is string:', typeof apiKey === 'string');
-  console.log(' - is not empty:', !!apiKey && apiKey.trim().length > 0);
-  console.log(' - length:', apiKey ? apiKey.length : 0);
   
   // Construct user data contexts for LLM
   const todayStr = new Date().toISOString().split('T')[0];
@@ -245,8 +227,6 @@ ${medicinesContext.length === 0 ? 'No medicines configured.' : medicinesContext.
   };
 
   if (!apiKey) {
-    console.warn('GEMINI_API_KEY is not defined. Falling back to local summary.');
-    console.log('Fallback response is triggered: YES (API Key Missing)');
     return buildLocalFallbackText();
   }
 
@@ -276,12 +256,6 @@ Daily Health/Wellness Logs (ordered by date):
 ${JSON.stringify(healthLogsContext, null, 2)}
 `;
 
-    console.log('Gemini request payload generated:');
-    console.log(' - Model: gemini-2.5-flash');
-    console.log(' - System Prompt length:', systemPrompt.length);
-    console.log(' - User Query:', question);
-    
-    console.log('Gemini request started...');
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: [
@@ -290,23 +264,11 @@ ${JSON.stringify(healthLogsContext, null, 2)}
       ]
     });
 
-    console.log('Raw Gemini response received:', JSON.stringify(response));
-    const parsedText = response.text;
-    console.log('Parsed response text length:', parsedText ? parsedText.length : 0);
-    console.log('Fallback response is triggered: NO');
-    console.log('=== End generateChatResponse Diagnostic Log ===');
-    return parsedText;
+    return response.text;
   } catch (error) {
-    console.error('Gemini API execution failed with exception:', error);
-    if (error.stack) {
-      console.error('Exception stack trace:', error.stack);
-    }
-    console.log('Fallback response is triggered: YES (Exception Caught)');
-    console.log('=== End generateChatResponse Diagnostic Log ===');
-    
-    // Return error details for remote debugging
-    const debugErr = `[DEBUG EXCEPTION ON RENDER: ${error.message}\nStack: ${error.stack}]`;
-    return `${debugErr}\n\n${buildLocalFallbackText()}`;
+    console.error('Gemini API execution failed:', error);
+    // Graceful error fallback using database data
+    return buildLocalFallbackText();
   }
 };
 
